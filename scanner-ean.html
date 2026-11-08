@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#287a45">
+<title>Scanner EAN - Ricambi LM</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f4;color:#202522;font-family:Arial,sans-serif;padding:18px}
+main{max-width:560px;margin:0 auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 8px 30px #0001}
+h1{font-size:23px;margin:0 0 14px}video{width:100%;aspect-ratio:4/3;object-fit:cover;background:#111;border-radius:12px}
+#stato{min-height:48px;line-height:1.4;color:#526057;margin:12px 0}
+button{width:100%;border:0;border-radius:10px;padding:15px;margin-top:10px;font-size:16px;font-weight:700;background:#287a45;color:#fff}
+button.second{background:#e8eee9;color:#202522}input{width:100%;font-size:18px;padding:12px;border:1px solid #bbc7be;border-radius:9px}
+small{display:block;color:#66706a;margin-top:12px;line-height:1.4}
+</style>
+</head>
+<body><main>
+<h1>Scanner codice EAN</h1>
+<video id="video" autoplay muted playsinline></video>
+<div id="stato">Richiesta accesso alla fotocamera…</div>
+<button id="chiudi">Chiudi scanner</button>
+<div id="manuale" hidden>
+<p>Se la lettura automatica non riesce, puoi inserire il codice manualmente:</p>
+<input id="codice" inputmode="numeric" autocomplete="off" placeholder="Codice EAN">
+<button id="invia">Usa questo codice</button>
+</div>
+<small>Questa pagina deve essere aperta da Ricambi LM. Dopo la lettura, il codice viene restituito alla scheda originale.</small>
+</main>
+<script>
+let stream=null, reader=null, timer=null, chiuso=false, detector=null, busy=false;
+const video=document.getElementById('video'), stato=document.getElementById('stato');
+function stop(){chiuso=true;if(timer)clearTimeout(timer);try{if(reader&&reader.reset)reader.reset()}catch(e){};if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;}
+function restituisci(codice){if(!codice)return;stop();const valore=String(codice).trim();if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'RICAMBI_EAN_SCANNED',code:valore},'*');stato.textContent='Codice acquisito. Ritorno a Ricambi LM…';setTimeout(()=>window.close(),350);}else{document.getElementById('codice').value=valore;document.getElementById('manuale').hidden=false;stato.textContent='Codice letto, ma la pagina originale non è raggiungibile. Copialo in Ricambi LM.';}}
+async function caricaZXing(){if(window.ZXing)return;await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});}
+async function loop(){if(chiuso||busy)return;if(video.readyState>=2){busy=true;try{const codes=await detector.detect(video);if(codes.length&&codes[0].rawValue){restituisci(codes[0].rawValue);return}}catch(e){}busy=false;}timer=setTimeout(loop,140)}
+async function avvia(){try{if(!navigator.mediaDevices?.getUserMedia)throw new Error('Il browser non espone l’accesso alla fotocamera.');stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();
+if('BarcodeDetector'in window){let formats=['ean_13','ean_8','upc_a','upc_e','code_128','itf'];try{const supported=await BarcodeDetector.getSupportedFormats();formats=formats.filter(f=>supported.includes(f))}catch(e){}if(formats.length){detector=new BarcodeDetector({formats});stato.textContent='Inquadra il codice a barre, mantenendo il telefono fermo.';loop();return;}}
+stato.textContent='Caricamento lettore compatibile…';await caricaZXing();reader=new ZXing.BrowserMultiFormatReader();stato.textContent='Inquadra il codice a barre.';reader.decodeFromVideoElement(video,(result)=>{if(result)restituisci(result.getText())});
+}catch(e){stop();stato.textContent='Fotocamera non avviata: '+(e.name||'Errore')+' — '+(e.message||String(e));document.getElementById('manuale').hidden=false;}}
+document.getElementById('chiudi').onclick=()=>{stop();window.close();stato.textContent='Scanner chiuso. Puoi tornare a Ricambi LM.'};
+document.getElementById('invia').onclick=()=>restituisci(document.getElementById('codice').value);
+window.addEventListener('pagehide',stop);avvia();
+</script></body></html>
